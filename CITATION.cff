@@ -1,0 +1,29 @@
+cff-version: 1.2.0
+title: "Nepali Politics Fine-tuning: Fine-tuning Gemma-3-270M on Nepali Election Q&A"
+authors:
+  - family-names: "Junior"
+    given-names: "Kusal"
+    orcid: "https://orcid.org/0000-0000-0000-0000"  # Add your ORCID if available
+repository-code: "https://github.com/kusaljr/nepali-politics-finetuning"
+url: "https://github.com/kusaljr/nepali-politics-finetuning"
+abstract: |
+  A cleaned-up supervised fine-tuning (SFT) notebook for fine-tuning Google's
+  Gemma-3-270M on Nepali election-related Q&A. Demonstrates best practices for SFT:
+  completion-only loss (training only on model responses), LoRA for parameter efficiency,
+  token-length measurement to prevent silent truncation, and multi-turn evaluation
+  that preserves conversation context. The model learns format and style consistent
+  within conversations, suitable for domain-specific dialogue without requiring
+  additional retrieval-augmented generation (RAG) for factual accuracy.
+keywords:
+  - "fine-tuning"
+  - "language-models"
+  - "nepali"
+  - "gemma"
+  - "lora"
+  - "supervised-fine-tuning"
+  - "nlp"
+  - "election-news"
+type: software
+license: MIT
+version: 1.0.0
+date-released: "2026-06-16"
