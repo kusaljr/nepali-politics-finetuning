@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 
 import numpy as np
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 import torch
 from datasets import Dataset
 from peft import LoraConfig
@@ -80,9 +81,9 @@ def main() -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     is_lora = args.method == "lora"
-    train_batch = args.train_batch_size or (8 if is_lora else 2)
-    eval_batch = args.eval_batch_size or (8 if is_lora else 2)
-    accumulation = args.gradient_accumulation_steps or (2 if is_lora else 8)
+    train_batch = args.train_batch_size or (2 if is_lora else 1)
+    eval_batch = args.eval_batch_size or 1
+    accumulation = args.gradient_accumulation_steps or (8 if is_lora else 16)
 
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, token=os.environ.get("HF_TOKEN"))
     tokenizer.chat_template = GEMMA_TEMPLATE
