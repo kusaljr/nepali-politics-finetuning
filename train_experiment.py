@@ -87,10 +87,11 @@ def main() -> None:
 
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, token=os.environ.get("HF_TOKEN"))
     tokenizer.chat_template = GEMMA_TEMPLATE
+    compute_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
     model = AutoModelForCausalLM.from_pretrained(
         MODEL_NAME,
         token=os.environ.get("HF_TOKEN"),
-        dtype=torch.float16,
+        dtype=compute_dtype,
         attn_implementation="eager",
     )
     model.config.use_cache = False
@@ -138,8 +139,8 @@ def main() -> None:
         gradient_checkpointing=True,
         seed=args.seed,
         data_seed=args.seed,
-        fp16=True,
-        bf16=False,
+        fp16=compute_dtype == torch.float16,
+        bf16=compute_dtype == torch.bfloat16,
         report_to="none",
     )
     trainer = SFTTrainer(

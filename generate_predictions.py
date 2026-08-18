@@ -91,8 +91,9 @@ def make_pipeline(model_name: str, adapter: Path | None = None, fine_tuned_model
     source = str(fine_tuned_model) if fine_tuned_model else model_name
     tokenizer_name = str(adapter) if adapter else source
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
+    compute_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
     model = AutoModelForCausalLM.from_pretrained(
-        source, dtype=torch.float16, device_map="auto", attn_implementation="eager"
+        source, dtype=compute_dtype, device_map="auto", attn_implementation="eager"
     )
     if adapter:
         model = PeftModel.from_pretrained(model, adapter)
