@@ -89,7 +89,7 @@ across epoch counts must account for the learning-rate schedule.
 ## Current status
 
 The corrected token statistics and deterministic baseline results are recorded
-under `results/`. The complete generative baseline table, training ablations,
-and adapter release remain pending fresh execution. Earlier qualitative output
-suggests that fine-tuning changes the output language and register, but this is
-not presented as a factuality result.
+under `results/`. The complete generative baseline table and training ablations
+remain pending fresh execution. Weight artifacts are kept outside Git. Earlier
+qualitative output suggests that fine-tuning changes the output language and
+register, but this is not presented as a factuality result.

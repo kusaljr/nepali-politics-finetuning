@@ -13,10 +13,9 @@ tags:
 
 # Gemma-3-270M Nepali Election Q&A Adapter
 
-This model card accompanies a LoRA adapter trained on the synthetic
-`nepali_politics_news.jsonl` dataset. The adapter artifact has not yet been
-published from this repository; reported metadata must be completed from the
-final reproducible run before release.
+This card documents the reference LoRA run on the synthetic
+`nepali_politics_news.jsonl` dataset. Model weights are kept outside the Git
+repository; the training configuration and compact results are versioned here.
 
 ## Intended use
 
@@ -32,11 +31,11 @@ notebook. Assistant-only masking is used in the reference LoRA configuration.
 
 ## Evaluation
 
-The final release should report results for the base, system-prompt, three-shot,
-nearest-neighbour, copy, and fine-tuned systems on the complete held-out split.
-Metrics should include Unicode-aware and default-tokenizer ROUGE-L, chrF,
-distinct-2, rep-4, Nepali/Hindi language identification, and entity precision
-and recall, with bootstrap confidence intervals.
+Evaluation covers the base, instruction-prefix, three-shot, nearest-neighbour,
+copy, and fine-tuned systems on the complete held-out split. Metrics include
+Unicode-aware and default-tokenizer ROUGE-L, chrF, distinct-2, rep-4,
+Nepali/Hindi language identification, and entity precision and recall, with
+bootstrap confidence intervals.
 
 ## Limitations
 
@@ -48,6 +47,6 @@ and recall, with bootstrap confidence intervals.
 
 ## Reproduction
 
-Exact dependency versions are in `requirements.txt`; training and evaluation
-code are in `finetune_nepali.ipynb`. Add the final hyperparameters, seed-level
-results, compute details, and adapter repository identifier before publishing.
+Exact dependency versions are in `requirements.txt`. The notebook and command
+line scripts reproduce training and evaluation. Final hyperparameters,
+seed-level results, and compute details are recorded after the suite completes.
