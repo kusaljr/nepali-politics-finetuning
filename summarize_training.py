@@ -66,7 +66,13 @@ def main() -> None:
     runs = {}
     for path in sorted(args.runs.glob("*/result.json")):
         result = json.loads(path.read_text(encoding="utf-8"))
-        runs[result["name"]] = compact(result)
+        run = compact(result)
+        common_path = path.parent / "common_eval.json"
+        run["common_eval"] = (
+            json.loads(common_path.read_text(encoding="utf-8"))
+            if common_path.exists() else None
+        )
+        runs[result["name"]] = run
     report = {"runs": runs, "three_seed_summary": seed_summary(runs)}
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(

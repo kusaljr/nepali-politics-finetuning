@@ -49,6 +49,10 @@ def main() -> None:
         assert run["eval_examples"] == 346
         assert math.isfinite(run["train_metrics"]["train_loss"])
         assert math.isfinite(run["eval_metrics"]["eval_loss"])
+        assert run["common_eval"]["max_length"] == 1024
+        assert run["common_eval"]["assistant_only_loss"] is True
+        assert run["common_eval"]["eval_examples"] == 346
+        assert math.isfinite(run["common_eval"]["metrics"]["eval_loss"])
 
     assert set(metrics) == EVALUATED_SYSTEMS
     for result in metrics.values():
