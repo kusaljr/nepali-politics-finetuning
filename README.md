@@ -1,57 +1,95 @@
-# Fine-tuning Gemma on Nepali Election News Q&A
+# Fine-tuning Gemma for Nepali Election Question Answering
 
-this is my learning project where i fine-tune a small language model to answer questions about nepali politics and elections. i am just exploring how supervised fine-tuning works.
+This project studies supervised fine-tuning of `google/gemma-3-270m-it` on a
+synthetic collection of multi-turn Nepali election question-answer
+conversations. The main question is whether small-model fine-tuning improves
+Nepali language and news-register control, and whether any improvement extends
+to factual entities.
 
-## what i did
+## Dataset
 
-i took `google/gemma-3-270m-it` (a small 270M parameter model) and fine-tuned it on nepali election question answer conversations. the base model was answering in hindi even when asked in nepali, so wanted to fix that.
+`nepali_politics_news.jsonl` contains 3,460 conversations. Each line is a JSON
+array of alternating user and model messages. The notebook creates a seeded
+90/10 split (3,114 training conversations and 346 test conversations).
 
-## dataset
+The dataset is synthetic. Results therefore characterize behavior on this
+dataset and should not be interpreted as factual coverage of Nepali politics.
 
-i made a synthetic dataset `nepali_politics_news.jsonl` of multi-turn conversations about nepali politics and elections. each conversation has around 5 turns of questions and answers in nepali (devanagari script).
+## Method
 
-- total conversations: 3460
-- train split: 3114
-- test split: 346
+The notebook includes:
 
-## main things i learned
+- completion-only loss using assistant-span masks;
+- LoRA fine-tuning and a switch for full-parameter fine-tuning;
+- token-length measurement over `enc["input_ids"]`;
+- turn-by-turn evaluation with reference conversation history;
+- base, prompted, few-shot, nearest-neighbour, and copy baselines;
+- Unicode-aware ROUGE-L, chrF, repetition, diversity, language-ID, and
+  entity-overlap metrics.
 
-**completion only loss** - by default the model trains on the full conversation including user questions which is wrong. you only want it to learn how to write answers not questions. fixed this by patching the chat template with `{% generation %}` tags.
+## Reproducing the experiments
 
-**token length matters** - my conversations are in devanagari script which uses several tokens per word. the old code used max_length=512 which was cutting most conversations in the middle. measured the actual lengths first, most conversations needed around 800-1000 tokens, so set max_length=1024.
+Install the pinned dependencies:
 
-**LoRA instead of full fine-tuning** - trained small adapter matrices instead of all 268M weights. uses much less memory and trains faster. used r=16, lora_alpha=32.
-
-**multi turn evaluation** - when evaluating, feed the gold history for each turn so later questions have the context they need. the old way was asking each question without any context which doesnt work for followup questions.
-
-## results
-
-base model was answering in hindi mixed with some bengali for nepali questions. after fine-tuning it answers in proper nepali.
-
-example:
-
-```
-Q: सुदूरपश्चिममा लगानी सम्मेलन कहिले हुँदैछ?
-
-BASE: सुदूरपश्चिममा लगानी सम्मेलन कहिले जाने की संभावना है। (answering in hindi)
-
-FINE-TUNED: सुदूरपश्चिम प्रदेशका विभिन्न जिल्लामा लगानी सम्मेलन आगामी फागुन ... (proper nepali)
+```bash
+pip install -r requirements.txt
 ```
 
-also measured ROUGE-L and chrF scores. fine-tuned model clearly beats base on both metrics.
+Accept the Gemma license on Hugging Face and make `HF_TOKEN` available in the
+environment, then run `finetune_nepali.ipynb` from top to bottom.
 
-**note:** the model learned the style and format of answers, not actual facts. so it writes fluent nepali political news style answers but sometimes makes up specific details like vote counts or names. thats expected for SFT. a 270M model is just too small to memorize thousands of specific facts like vote counts and names. if we want better factual answers we would need a much bigger model, or train on way more data that repeats the same facts many times so the model actually remembers them.
+Using the Gemma tokenizer, conversation lengths range from 113 to 961 tokens
+(median 621, p95 755, p99 815). Of the 3,460 conversations, 3,221 (93.1%) exceed
+512 tokens and none exceeds 1,024. A 1,024-token context therefore prevents
+training-time truncation in this dataset. Whether that additional context
+improves evaluation loss remains to be established by the 512-versus-1,024
+ablation.
 
-## training config
+## Evaluation protocol
 
-```
-model: google/gemma-3-270m-it
-lora r: 16
-lora alpha: 32
-epochs: 3
-batch size: 8 (effective 16 with grad accumulation)
-learning rate: 2e-4
-max length: 1024
-```
+The primary comparison uses every held-out conversation. Generated turns are
+evaluated against the reference answer while both generative models receive the
+same reference history. Greedy decoding is used for the reproducible headline
+result; sampled decoding is reported separately when testing repetition.
 
-training took around 322 seconds on a NVIDIA RTX PRO 6000.
+The planned main table contains:
+
+1. base Gemma;
+2. base Gemma with a Nepali news-style system instruction;
+3. base Gemma with three Nepali demonstrations;
+4. character n-gram TF-IDF nearest-neighbour retrieval;
+5. question copying;
+6. the fine-tuned model.
+
+Results are not copied from stale notebook output. Tables should be added only
+after all systems have been evaluated under the same protocol, with bootstrap
+confidence intervals over test turns.
+
+The two deterministic baselines have been run on all 1,718 held-out turns. The
+copy baseline obtains chrF 8.50 and the character TF-IDF nearest-neighbour
+baseline obtains chrF 32.73. Default-tokenizer ROUGE-L is 0.0004 and 0.0000,
+respectively, while Unicode-aware ROUGE-L is 0.1185 and 0.1579. These results
+are stored in `results/text_baselines.json`; generative systems remain pending.
+
+## Training configuration
+
+The reference configuration uses three epochs, seed 42, completion-only loss,
+and LoRA with rank 16 and alpha 32. The study design also compares:
+
+- context lengths 512 and 1,024;
+- completion-only and full-conversation loss;
+- LoRA ranks 8, 16, and 32;
+- 1, 3, and 5 epochs;
+- LoRA and full-parameter fine-tuning;
+- three seeds for the selected configuration.
+
+The notebook uses step-based evaluation and fixed warm-up steps. Comparisons
+across epoch counts must account for the learning-rate schedule.
+
+## Current status
+
+The corrected token statistics and deterministic baseline results are recorded
+under `results/`. The complete generative baseline table, training ablations,
+and adapter release remain pending fresh execution. Earlier qualitative output
+suggests that fine-tuning changes the output language and register, but this is
+not presented as a factuality result.

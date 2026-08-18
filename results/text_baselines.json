@@ -1,0 +1,30 @@
+{
+  "split": {
+    "test_conversations": 346,
+    "test_turns": 1718,
+    "seed": 42
+  },
+  "copy-question": {
+    "rougeL_default": 0.000388,
+    "rougeL_unicode": 0.118452,
+    "chrf": 8.5027,
+    "distinct_2": 1.0,
+    "rep_4": 0.0,
+    "entity_precision": 0.163299,
+    "entity_recall": 0.018569
+  },
+  "char-tfidf-nearest-neighbour": {
+    "rougeL_default": 0.0,
+    "rougeL_unicode": 0.157918,
+    "chrf": 32.7331,
+    "distinct_2": 0.98646,
+    "rep_4": 0.000246,
+    "entity_precision": 0.040408,
+    "entity_recall": 0.040212
+  },
+  "notes": [
+    "ROUGE-L and diversity metrics are macro-averaged over turns.",
+    "Entity scores use the documented heuristic in evaluate.py and are not NER-model scores.",
+    "Bootstrap confidence intervals are printed by evaluate.py and should be included in the final paper table."
+  ]
+}

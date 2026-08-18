@@ -1,0 +1,14 @@
+{
+  "model_tokenizer": "google/gemma-3-270m-it",
+  "transformers_version": "5.12.1",
+  "conversations": 3460,
+  "min": 113,
+  "median": 621,
+  "p90": 724,
+  "p95": 755,
+  "p99": 815,
+  "max": 961,
+  "over_512_count": 3221,
+  "over_512_fraction": 0.9309248554913295,
+  "over_1024_count": 0
+}
