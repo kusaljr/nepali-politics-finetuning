@@ -197,10 +197,9 @@ def evaluate(rows: list[dict], seed: int, lid_model=None) -> dict:
             row["hit_max_new_tokens"] for row in rows
         ) / len(rows)
     if lid_model is not None:
-        labels = [
-            lid_model.predict(row["prediction"].replace("\n", " "), k=1)[0][0]
-            for row in rows
-        ]
+        texts = [row["prediction"].replace("\n", " ") for row in rows]
+        predicted_labels, _ = lid_model.predict(texts, k=1)
+        labels = [item[0] for item in predicted_labels]
         result["language_ne_accuracy"] = sum(
             label == "__label__ne" for label in labels
         ) / len(labels)

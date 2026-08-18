@@ -41,9 +41,9 @@ environment, then run `finetune_nepali.ipynb` from top to bottom.
 Using the Gemma tokenizer, conversation lengths range from 113 to 961 tokens
 (median 621, p95 755, p99 815). Of the 3,460 conversations, 3,221 (93.1%) exceed
 512 tokens and none exceeds 1,024. A 1,024-token context therefore prevents
-training-time truncation in this dataset. Whether that additional context
-improves evaluation loss remains to be established by the 512-versus-1,024
-ablation.
+training-time truncation in this dataset. Despite this, the 512-token run had
+lower common-protocol loss than the 1,024-token run (1.8175 versus 1.8945) and
+finished about 7% faster. More retained context did not help this setup.
 
 ## Evaluation protocol
 
@@ -52,24 +52,31 @@ evaluated against the reference answer while both generative models receive the
 same reference history. Greedy decoding is used for the reproducible headline
 result; sampled decoding is reported separately when testing repetition.
 
-The planned main table contains:
+All systems were evaluated on 1,718 held-out turns. Confidence intervals and
+category-level entity counts are in `results/generation_metrics.json`.
 
-1. base Gemma;
-2. base Gemma with a Nepali news-style system instruction;
-3. base Gemma with three Nepali demonstrations;
-4. character n-gram TF-IDF nearest-neighbour retrieval;
-5. question copying;
-6. the fine-tuned model.
+| System | chrF | Unicode ROUGE-L | Nepali | Entity P/R | rep-4 |
+|---|---:|---:|---:|---:|---:|
+| Base | 17.09 | 0.131 | 72.4% | 0.324 / 0.093 | 0.065 |
+| Nepali instruction | 15.96 | 0.126 | 73.1% | 0.318 / 0.088 | 0.054 |
+| Three-shot Nepali | 16.69 | 0.126 | 82.1% | 0.260 / 0.086 | 0.068 |
+| Character TF-IDF retrieval | 32.73 | 0.158 | 100.0% | 0.126 / 0.127 | 0.000 |
+| Copy question | 8.50 | 0.118 | 69.9% | 0.524 / 0.061 | 0.000 |
+| LoRA, seed 42 | 38.07 | 0.229 | 99.6% | 0.234 / 0.215 | 0.037 |
+| Full fine-tune | **39.41** | **0.238** | **100.0%** | 0.247 / 0.225 | 0.029 |
+| LoRA, sampled | 37.20 | 0.215 | 99.5% | 0.208 / 0.206 | **0.011** |
 
-Results are not copied from stale notebook output. Tables should be added only
-after all systems have been evaluated under the same protocol, with bootstrap
-confidence intervals over test turns.
+Fine-tuning produces a large language-control gain and improves overlap with
+the references. It does not establish factual knowledge: entity precision is
+only 0.247 for the best system, and the dataset itself is synthetic. Full
+fine-tuning narrowly beats the three LoRA seeds (chrF 38.07, 39.44, and 38.26).
+Sampling reduces repetition but also lowers chrF.
 
-The two deterministic baselines have been run on all 1,718 held-out turns. The
-copy baseline obtains chrF 8.50 and the character TF-IDF nearest-neighbour
-baseline obtains chrF 32.73. Default-tokenizer ROUGE-L is 0.0004 and 0.0000,
-respectively, while Unicode-aware ROUGE-L is 0.1185 and 0.1579. These results
-are stored in `results/text_baselines.json`; generative systems remain pending.
+The standard `rouge_score` tokenizer is unsuitable for these Devanagari
+outputs: every system scores about 0.000--0.001 with it, compared with
+0.118--0.238 using the Unicode-aware tokenizer. A bounded review of six ACL
+Anthology papers is recorded in `results/rouge_literature_review.md`; five did
+not document a custom or language-aware ROUGE tokenizer.
 
 ## Training configuration
 
@@ -84,12 +91,27 @@ and LoRA with rank 16 and alpha 32. The study design also compares:
 - three seeds for the selected configuration.
 
 The notebook uses step-based evaluation and fixed warm-up steps. Comparisons
-across epoch counts must account for the learning-rate schedule.
+use the same constant-with-warm-up schedule and are rescored with a shared
+1,024-token, assistant-only evaluation protocol.
 
-## Current status
+| Training run | Eval loss | Token accuracy | Minutes |
+|---|---:|---:|---:|
+| LoRA r16, 1 epoch | 2.0534 | 0.6007 | 17.4 |
+| LoRA r16, 3 epochs | 1.8945 | 0.6280 | 50.7 |
+| LoRA r16, 5 epochs | 1.8472 | 0.6343 | 83.8 |
+| LoRA r8, 3 epochs | 1.9591 | 0.6183 | 50.8 |
+| LoRA r32, 3 epochs | 1.8578 | 0.6338 | 51.2 |
+| LoRA r16, 512 tokens | 1.8175 | 0.6271 | 47.2 |
+| LoRA r16, all-token loss | 1.9037 | 0.6269 | 51.0 |
+| Full fine-tune, 3 epochs | **1.7021** | **0.6381** | 54.3 |
 
-The corrected token statistics and deterministic baseline results are recorded
-under `results/`. The complete generative baseline table and training ablations
-remain pending fresh execution. Weight artifacts are kept outside Git. Earlier
-qualitative output suggests that fine-tuning changes the output language and
-register, but this is not presented as a factuality result.
+Across the three main LoRA seeds, eval loss is 1.8903 ± 0.0134 and token
+accuracy is 0.6251 ± 0.0028 (sample standard deviation). Assistant-only masking
+has little effect here. Rank 32 and five epochs help modestly, while full
+fine-tuning gives the strongest loss and generation results.
+
+## Artifacts
+
+Compact training and generation results are versioned under `results/`.
+Predictions and weights stay outside Git because of their size. Nothing from
+this run was uploaded to Hugging Face.

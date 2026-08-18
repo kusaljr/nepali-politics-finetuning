@@ -37,6 +37,16 @@ Unicode-aware and default-tokenizer ROUGE-L, chrF, distinct-2, rep-4,
 Nepali/Hindi language identification, and entity precision and recall, with
 bootstrap confidence intervals.
 
+On all 1,718 held-out turns, the reference LoRA run obtains chrF 38.07,
+Unicode-aware ROUGE-L 0.229, 99.6% Nepali language identification, and entity
+precision/recall of 0.234/0.215. The base model obtains chrF 17.09 and 72.4%
+Nepali identification. A full fine-tune obtains chrF 39.41 and ROUGE-L 0.238.
+The three LoRA seeds score 38.07, 39.44, and 38.26 chrF.
+
+Default-tokenizer ROUGE-L is approximately zero for every system; the custom
+Unicode tokenizer is required for meaningful Devanagari token overlap. Full
+metrics and bootstrap intervals are in `results/generation_metrics.json`.
+
 ## Limitations
 
 - The data are synthetic and may contain factual errors or stylistic artifacts.
@@ -48,5 +58,6 @@ bootstrap confidence intervals.
 ## Reproduction
 
 Exact dependency versions are in `requirements.txt`. The notebook and command
-line scripts reproduce training and evaluation. Final hyperparameters,
-seed-level results, and compute details are recorded after the suite completes.
+line scripts reproduce training and evaluation. Training ablations and
+seed-level results are in `results/training_results.json`. Model weights are not
+published by this repository.

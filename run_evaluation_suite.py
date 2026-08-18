@@ -106,6 +106,10 @@ def main() -> None:
     metrics = json.loads(report.stdout)
     with (args.output / "metrics.json").open("w", encoding="utf-8") as handle:
         json.dump(metrics, handle, ensure_ascii=False, indent=2)
+    results_path = Path("results/generation_metrics.json")
+    results_path.parent.mkdir(parents=True, exist_ok=True)
+    with results_path.open("w", encoding="utf-8") as handle:
+        json.dump(metrics, handle, ensure_ascii=False, indent=2)
     print(report.stdout)
 
 
