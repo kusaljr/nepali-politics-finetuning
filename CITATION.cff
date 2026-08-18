@@ -3,7 +3,6 @@ title: "Nepali Politics Fine-tuning: Fine-tuning Gemma-3-270M on Nepali Election
 authors:
   - family-names: "Junior"
     given-names: "Kusal"
-    orcid: "https://orcid.org/0000-0000-0000-0000"  # Add your ORCID if available
 repository-code: "https://github.com/kusaljr/nepali-politics-finetuning"
 url: "https://github.com/kusaljr/nepali-politics-finetuning"
 abstract: |
