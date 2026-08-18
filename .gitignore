@@ -3,6 +3,4 @@ __pycache__/
 .venv/
 runs/
 evaluation/*.bin
-evaluation/*_predictions.jsonl
-evaluation/all_predictions.jsonl
-evaluation/text_baselines.jsonl
+evaluation/*.jsonl
