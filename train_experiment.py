@@ -135,7 +135,6 @@ def main() -> None:
         eval_steps=50,
         save_strategy="no",
         gradient_checkpointing=True,
-        group_by_length=True,
         seed=args.seed,
         data_seed=args.seed,
         fp16=True,
