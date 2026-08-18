@@ -34,9 +34,24 @@ NUMBER_RE = regex.compile(r"\p{N}+(?:[.,]\p{N}+)*")
 DATE_RE = regex.compile(
     r"(?:\p{N}{1,4}[-/.]\p{N}{1,2}(?:[-/.]\p{N}{1,4})?)"
 )
+NEPALI_MONTH_RE = regex.compile(
+    r"\p{N}{1,2}\s+(?:बैशाख|वैशाख|जेठ|असार|साउन|भदौ|असोज|कात्तिक|मंसिर|पुस|माघ|फागुन|चैत)"
+)
 PARTY_TERMS = (
     "कांग्रेस", "एमाले", "माओवादी", "रास्वपा", "राप्रपा", "जसपा",
     "लोसपा", "एकीकृत समाजवादी", "जनमत", "नागरिक उन्मुक्ति",
+)
+PERSON_TITLES = (
+    "राष्ट्रपति", "पूर्वराष्ट्रपति", "प्रधानमन्त्री", "उपप्रधानमन्त्री",
+    "मन्त्री", "सांसद", "अध्यक्ष", "महासचिव", "नेता", "उम्मेदवार",
+    "मेयर", "प्रमुख", "प्रवक्ता",
+)
+DEVANAGARI_WORD = r"[\p{Devanagari}][\p{Devanagari}\p{M}]*"
+PERSON_AFTER_TITLE_RE = regex.compile(
+    rf"(?:{'|'.join(PERSON_TITLES)})\s+({DEVANAGARI_WORD}(?:\s+{DEVANAGARI_WORD})?)"
+)
+PERSON_CASE_RE = regex.compile(
+    rf"({DEVANAGARI_WORD}\s+{DEVANAGARI_WORD})(?:ले|लाई|सँग|बाट)\b"
 )
 
 
@@ -108,21 +123,31 @@ def rep_4(text: str) -> float:
     return 1.0 - len(set(fourgrams)) / len(fourgrams) if fourgrams else 0.0
 
 
-def entities(text: str) -> set[str]:
-    found = set(NUMBER_RE.findall(text)) | set(DATE_RE.findall(text))
-    found.update(term for term in PARTY_TERMS if term in text)
-    # A reproducible heuristic for multi-token named entities in Devanagari text.
-    found.update(regex.findall(r"(?:\p{Devanagari}+\s+){1,2}\p{Devanagari}+", text))
-    return found
+def entities(text: str) -> dict[str, set[str]]:
+    dates = set(DATE_RE.findall(text)) | set(NEPALI_MONTH_RE.findall(text))
+    numbers = set(NUMBER_RE.findall(text)) - {
+        part for date in dates for part in NUMBER_RE.findall(date)
+    }
+    persons = set(PERSON_AFTER_TITLE_RE.findall(text))
+    persons.update(PERSON_CASE_RE.findall(text))
+    return {
+        "person": persons,
+        "party": {term for term in PARTY_TERMS if term in text},
+        "date": dates,
+        "number": numbers,
+    }
 
 
-def entity_counts(prediction: str, gold: str) -> tuple[int, int, int]:
+def entity_counts(prediction: str, gold: str) -> dict[str, tuple[int, int, int]]:
     pred_entities, gold_entities = entities(prediction), entities(gold)
-    return (
-        len(pred_entities & gold_entities),
-        len(pred_entities),
-        len(gold_entities),
-    )
+    return {
+        kind: (
+            len(pred_entities[kind] & gold_entities[kind]),
+            len(pred_entities[kind]),
+            len(gold_entities[kind]),
+        )
+        for kind in pred_entities
+    }
 
 
 def bootstrap_mean(values: list[float], seed: int, samples: int = 10_000) -> tuple[float, float]:
@@ -136,7 +161,7 @@ def bootstrap_mean(values: list[float], seed: int, samples: int = 10_000) -> tup
 
 def evaluate(rows: list[dict], seed: int, lid_model=None) -> dict:
     metrics = defaultdict(list)
-    entity_tp = entity_pred = entity_gold = 0
+    entity_totals = defaultdict(lambda: [0, 0, 0])
     for row in rows:
         prediction, gold = row["prediction"], row["gold"]
         metrics["rougeL_default"].append(
@@ -148,17 +173,29 @@ def evaluate(rows: list[dict], seed: int, lid_model=None) -> dict:
         metrics["chrf"].append(sacrebleu.sentence_chrf(prediction, [gold]).score)
         metrics["distinct_2"].append(distinct_2(prediction))
         metrics["rep_4"].append(rep_4(prediction))
-        tp, pred_count, gold_count = entity_counts(prediction, gold)
-        entity_tp += tp
-        entity_pred += pred_count
-        entity_gold += gold_count
+        for kind, counts in entity_counts(prediction, gold).items():
+            for index, count in enumerate(counts):
+                entity_totals[kind][index] += count
 
     result = {"n": len(rows)}
     for name, values in metrics.items():
         low, high = bootstrap_mean(values, seed)
         result[name] = {"mean": float(np.mean(values)), "ci95": [low, high]}
-    result["entity_precision"] = entity_tp / entity_pred if entity_pred else 0.0
-    result["entity_recall"] = entity_tp / entity_gold if entity_gold else 0.0
+    overall = [sum(counts[i] for counts in entity_totals.values()) for i in range(3)]
+    result["entity_precision"] = overall[0] / overall[1] if overall[1] else 0.0
+    result["entity_recall"] = overall[0] / overall[2] if overall[2] else 0.0
+    result["entities"] = {}
+    for kind, (tp, pred_count, gold_count) in entity_totals.items():
+        result["entities"][kind] = {
+            "precision": tp / pred_count if pred_count else 0.0,
+            "recall": tp / gold_count if gold_count else 0.0,
+            "predicted": pred_count,
+            "gold": gold_count,
+        }
+    if all("hit_max_new_tokens" in row for row in rows):
+        result["generation_cap_rate"] = sum(
+            row["hit_max_new_tokens"] for row in rows
+        ) / len(rows)
     if lid_model is not None:
         labels = [
             lid_model.predict(row["prediction"].replace("\n", " "), k=1)[0][0]
