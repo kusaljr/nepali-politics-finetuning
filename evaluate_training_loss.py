@@ -63,7 +63,7 @@ def main() -> None:
     trainer = SFTTrainer(
         model=model,
         args=config,
-        train_dataset=None,
+        train_dataset=data["train"],
         eval_dataset=data["test"],
         processing_class=tokenizer,
     )
