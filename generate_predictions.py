@@ -112,12 +112,15 @@ def main():
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--max-new-tokens", type=int, default=256)
+    parser.add_argument("--max-tasks", type=int)
     parser.add_argument("--sample", action="store_true")
     args = parser.parse_args()
 
     torch.manual_seed(args.seed)
     split = load_split(args.dataset, args.seed)
     tasks = turn_tasks(split["test"])
+    if args.max_tasks is not None:
+        tasks = tasks[:args.max_tasks]
     demos = demonstrations(split["train"])
     rows = []
     base_pipe = None
