@@ -88,6 +88,12 @@ are not distinguishable on this test set.
 
 ### Generation behavior
 
+The executed [`generation_evidence.ipynb`](generation_evidence.ipynb) shows
+the aggregate calculations and raw examples. Its source data include all
+1,718 test predictions and are published as compressed JSONL files under
+`results/predictions/`, so the claims below can be checked without access to
+the model weights.
+
 The full fine-tune's greedy outputs are generally fluent, news-shaped Nepali
 paragraphs rather than short answer fragments. Their median length is 96
 generated tokens (p90 120); none is empty, and only 5 of 1,718 outputs reach
