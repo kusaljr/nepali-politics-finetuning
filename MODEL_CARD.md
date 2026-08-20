@@ -41,11 +41,28 @@ On all 1,718 held-out turns, the reference LoRA run obtains chrF 38.07,
 Unicode-aware ROUGE-L 0.229, 99.6% Nepali language identification, and entity
 precision/recall of 0.234/0.215. The base model obtains chrF 17.09 and 72.4%
 Nepali identification. A full fine-tune obtains chrF 39.41 and ROUGE-L 0.238.
-The three LoRA seeds score 38.07, 39.44, and 38.26 chrF.
+The three LoRA seeds score 38.07, 39.44, and 38.26 chrF — the full fine-tune
+and the seed-7 LoRA run are not distinguishable on chrF once the comparison
+accounts for turns being clustered by conversation (see README).
+
+A zero-training character TF-IDF nearest-neighbour baseline scores 32.73
+chrF, so fine-tuning's gain over a lookup table is 6.7 chrF, not the 22-point
+gain visible against the base model. Fine-tuning's clearer advantage is
+entity recall (0.215 vs. 0.127 for that baseline). The person/date entity
+extractor is a regex heuristic audited separately in
+`results/entity_extractor_audit.md`: on hand-labeled gold text it gets 0.19
+precision / 0.55 recall against real person mentions, which bounds how the
+entity numbers above should be read — they are not a clean measurement of
+model factuality. Language-ID (fastText `lid.176`) is also unreliable on
+short Devanagari text: the copy-question baseline, which echoes the Nepali
+question verbatim, scores only 69.9% Nepali, well below what verbatim Nepali
+text should score.
 
 Default-tokenizer ROUGE-L is approximately zero for every system; the custom
 Unicode tokenizer is required for meaningful Devanagari token overlap. Full
-metrics and bootstrap intervals are in `results/generation_metrics.json`.
+metrics and bootstrap intervals are in `results/generation_metrics.json`,
+including the corrected cluster bootstrap, entity extraction, gold-answer
+language-ID reference, and paired full-vs-LoRA comparison.
 
 ## Limitations
 
@@ -54,6 +71,9 @@ metrics and bootstrap intervals are in `results/generation_metrics.json`.
   underlying political facts.
 - Generated names, dates, numbers, and vote counts require verification.
 - The adapter must not be used for election reporting or political decisions.
+- The random 90/10 split is not source-disjoint: a zero-training retrieval
+  baseline scores 32.73 chrF, indicating meaningful content overlap between
+  train and test questions.
 
 ## Reproduction
 

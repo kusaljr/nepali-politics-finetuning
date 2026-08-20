@@ -34,8 +34,15 @@ NUMBER_RE = regex.compile(r"\p{N}+(?:[.,]\p{N}+)*")
 DATE_RE = regex.compile(
     r"(?:\p{N}{1,4}[-/.]\p{N}{1,2}(?:[-/.]\p{N}{1,4})?)"
 )
+NEPALI_MONTHS = (
+    "बैशाख", "वैशाख", "जेठ", "असार", "साउन", "भदौ", "असोज",
+    "कात्तिक", "मंसिर", "पुस", "माघ", "फागुन", "चैत",
+)
+# Both attested orders: "२८ वैशाख" (number first) and "वैशाख २८" (month
+# first, the dominant order in this corpus's news-style dates).
 NEPALI_MONTH_RE = regex.compile(
-    r"\p{N}{1,2}\s+(?:बैशाख|वैशाख|जेठ|असार|साउन|भदौ|असोज|कात्तिक|मंसिर|पुस|माघ|फागुन|चैत)"
+    rf"\p{{N}}{{1,2}}\s+(?:{'|'.join(NEPALI_MONTHS)})"
+    rf"|(?:{'|'.join(NEPALI_MONTHS)})\s+\p{{N}}{{1,2}}"
 )
 PARTY_TERMS = (
     "कांग्रेस", "एमाले", "माओवादी", "रास्वपा", "राप्रपा", "जसपा",
@@ -53,6 +60,16 @@ PERSON_AFTER_TITLE_RE = regex.compile(
 PERSON_CASE_RE = regex.compile(
     rf"({DEVANAGARI_WORD}\s+{DEVANAGARI_WORD})(?:ले|लाई|सँग|बाट)\b"
 )
+# PERSON_AFTER_TITLE_RE's word class swallows a trailing case marker
+# (e.g. "राईले") because ले/लाई/सँग/बाट are themselves Devanagari
+# characters; PERSON_CASE_RE excludes the marker by construction. Strip
+# it from both so the same person doesn't surface as two distinct
+# entities depending on which pattern caught them.
+PERSON_CASE_SUFFIX_RE = regex.compile(r"(?:ले|लाई|सँग|बाट)$")
+
+
+def strip_person_case_suffix(name: str) -> str:
+    return PERSON_CASE_SUFFIX_RE.sub("", name)
 
 
 def read_jsonl(path: Path) -> list[dict]:
@@ -99,7 +116,11 @@ def build_text_baselines(dataset_path: Path, output_path: Path, seed: int) -> No
 
     output = []
     for row, neighbour in zip(test, nearest):
-        common = {"question": row["question"], "gold": row["gold"]}
+        common = {
+            "conversation_id": row["conversation_id"],
+            "question": row["question"],
+            "gold": row["gold"],
+        }
         output.append({**common, "system": "copy-question", "prediction": row["question"]})
         output.append({
             **common,
@@ -128,8 +149,8 @@ def entities(text: str) -> dict[str, set[str]]:
     numbers = set(NUMBER_RE.findall(text)) - {
         part for date in dates for part in NUMBER_RE.findall(date)
     }
-    persons = set(PERSON_AFTER_TITLE_RE.findall(text))
-    persons.update(PERSON_CASE_RE.findall(text))
+    persons = {strip_person_case_suffix(name) for name in PERSON_AFTER_TITLE_RE.findall(text)}
+    persons.update(strip_person_case_suffix(name) for name in PERSON_CASE_RE.findall(text))
     return {
         "person": persons,
         "party": {term for term in PARTY_TERMS if term in text},
@@ -150,17 +171,75 @@ def entity_counts(prediction: str, gold: str) -> dict[str, tuple[int, int, int]]
     }
 
 
-def bootstrap_mean(values: list[float], seed: int, samples: int = 10_000) -> tuple[float, float]:
-    array = np.asarray(values, dtype=float)
+def _cluster_groups(values: list[float], conversation_ids: list[int]) -> list[np.ndarray]:
+    by_conversation: dict[int, list[float]] = defaultdict(list)
+    for value, conversation_id in zip(values, conversation_ids):
+        by_conversation[conversation_id].append(value)
+    return [np.asarray(group, dtype=float) for group in by_conversation.values()]
+
+
+def cluster_bootstrap_mean(
+    values: list[float], conversation_ids: list[int], seed: int, samples: int = 10_000,
+) -> tuple[float, float]:
+    """Resample conversations (not turns) with replacement.
+
+    Turns within a conversation share topic and phrasing, so resampling
+    turns independently understates variance and produces CIs that are
+    too narrow. Resampling whole conversations respects that clustering.
+    """
+    groups = _cluster_groups(values, conversation_ids)
+    group_sums = np.asarray([group.sum() for group in groups])
+    group_sizes = np.asarray([len(group) for group in groups])
     rng = np.random.default_rng(seed)
-    means = np.empty(samples)
-    for i in range(samples):
-        means[i] = rng.choice(array, size=len(array), replace=True).mean()
+    choice = rng.integers(0, len(groups), size=(samples, len(groups)))
+    means = group_sums[choice].sum(axis=1) / group_sizes[choice].sum(axis=1)
     return tuple(np.quantile(means, [0.025, 0.975]))
+
+
+def paired_cluster_bootstrap_diff(
+    values_a: list[float],
+    values_b: list[float],
+    conversation_ids: list[int],
+    seed: int,
+    samples: int = 10_000,
+) -> dict:
+    """CI on the per-turn difference (a - b), resampled by conversation.
+
+    Two systems can each have a plausible-looking CI on their own mean
+    while still overlapping heavily; this tests the paired difference
+    directly instead of eyeballing overlap between separate intervals.
+    """
+    diffs = [a - b for a, b in zip(values_a, values_b)]
+    groups = _cluster_groups(diffs, conversation_ids)
+    group_sums = np.asarray([group.sum() for group in groups])
+    group_sizes = np.asarray([len(group) for group in groups])
+    rng = np.random.default_rng(seed)
+    choice = rng.integers(0, len(groups), size=(samples, len(groups)))
+    means = group_sums[choice].sum(axis=1) / group_sizes[choice].sum(axis=1)
+    low, high = np.quantile(means, [0.025, 0.975])
+    return {
+        "mean_diff": float(np.mean(diffs)),
+        "ci95": [float(low), float(high)],
+        "excludes_zero": bool(low > 0 or high < 0),
+    }
+
+
+def f1(precision: float, recall: float) -> float:
+    return 2 * precision * recall / (precision + recall) if precision + recall else 0.0
+
+
+def language_id_rates(texts: list[str], lid_model) -> dict:
+    predicted_labels, _ = lid_model.predict([text.replace("\n", " ") for text in texts], k=1)
+    labels = [item[0] for item in predicted_labels]
+    return {
+        "ne_accuracy": sum(label == "__label__ne" for label in labels) / len(labels),
+        "hi_rate": sum(label == "__label__hi" for label in labels) / len(labels),
+    }
 
 
 def evaluate(rows: list[dict], seed: int, lid_model=None) -> dict:
     metrics = defaultdict(list)
+    conversation_ids = [row["conversation_id"] for row in rows]
     entity_totals = defaultdict(lambda: [0, 0, 0])
     for row in rows:
         prediction, gold = row["prediction"], row["gold"]
@@ -179,16 +258,22 @@ def evaluate(rows: list[dict], seed: int, lid_model=None) -> dict:
 
     result = {"n": len(rows)}
     for name, values in metrics.items():
-        low, high = bootstrap_mean(values, seed)
+        low, high = cluster_bootstrap_mean(values, conversation_ids, seed)
         result[name] = {"mean": float(np.mean(values)), "ci95": [low, high]}
     overall = [sum(counts[i] for counts in entity_totals.values()) for i in range(3)]
-    result["entity_precision"] = overall[0] / overall[1] if overall[1] else 0.0
-    result["entity_recall"] = overall[0] / overall[2] if overall[2] else 0.0
+    overall_precision = overall[0] / overall[1] if overall[1] else 0.0
+    overall_recall = overall[0] / overall[2] if overall[2] else 0.0
+    result["entity_precision"] = overall_precision
+    result["entity_recall"] = overall_recall
+    result["entity_f1"] = f1(overall_precision, overall_recall)
     result["entities"] = {}
     for kind, (tp, pred_count, gold_count) in entity_totals.items():
+        precision = tp / pred_count if pred_count else 0.0
+        recall = tp / gold_count if gold_count else 0.0
         result["entities"][kind] = {
-            "precision": tp / pred_count if pred_count else 0.0,
-            "recall": tp / gold_count if gold_count else 0.0,
+            "precision": precision,
+            "recall": recall,
+            "f1": f1(precision, recall),
             "predicted": pred_count,
             "gold": gold_count,
         }
@@ -197,15 +282,25 @@ def evaluate(rows: list[dict], seed: int, lid_model=None) -> dict:
             row["hit_max_new_tokens"] for row in rows
         ) / len(rows)
     if lid_model is not None:
-        texts = [row["prediction"].replace("\n", " ") for row in rows]
-        predicted_labels, _ = lid_model.predict(texts, k=1)
-        labels = [item[0] for item in predicted_labels]
-        result["language_ne_accuracy"] = sum(
-            label == "__label__ne" for label in labels
-        ) / len(labels)
-        result["language_hi_rate"] = sum(
-            label == "__label__hi" for label in labels
-        ) / len(labels)
+        rates = language_id_rates([row["prediction"] for row in rows], lid_model)
+        result["language_ne_accuracy"] = rates["ne_accuracy"]
+        result["language_hi_rate"] = rates["hi_rate"]
+    return result
+
+
+def paired_chrf_comparison(rows_a: list[dict], rows_b: list[dict], seed: int) -> dict:
+    by_key_b = {(row["conversation_id"], row["question"]): row for row in rows_b}
+    aligned_a, aligned_b = [], []
+    for row in rows_a:
+        match = by_key_b.get((row["conversation_id"], row["question"]))
+        if match is not None:
+            aligned_a.append(row)
+            aligned_b.append(match)
+    conversation_ids = [row["conversation_id"] for row in aligned_a]
+    chrf_a = [sacrebleu.sentence_chrf(row["prediction"], [row["gold"]]).score for row in aligned_a]
+    chrf_b = [sacrebleu.sentence_chrf(row["prediction"], [row["gold"]]).score for row in aligned_b]
+    result = paired_cluster_bootstrap_diff(chrf_a, chrf_b, conversation_ids, seed)
+    result["n"] = len(aligned_a)
     return result
 
 
@@ -220,6 +315,10 @@ def main() -> None:
         help="path to fastText lid.176.bin for Nepali/Hindi output rates",
     )
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--compare", action="append", nargs=2, metavar=("SYSTEM_A", "SYSTEM_B"),
+        help="paired cluster-bootstrap chrF comparison between two systems; repeatable",
+    )
     args = parser.parse_args()
 
     if args.build_text_baselines:
@@ -237,6 +336,17 @@ def main() -> None:
             name: evaluate(rows, args.seed, lid_model)
             for name, rows in grouped.items()
         }
+        if lid_model is not None:
+            any_rows = next(iter(grouped.values()))
+            gold_by_key = {(row["conversation_id"], row["question"]): row["gold"] for row in any_rows}
+            report["_gold_language_reference"] = language_id_rates(list(gold_by_key.values()), lid_model)
+        if args.compare:
+            report["_comparisons"] = {
+                f"{system_a}_vs_{system_b}": paired_chrf_comparison(
+                    grouped[system_a], grouped[system_b], args.seed
+                )
+                for system_a, system_b in args.compare
+            }
         print(json.dumps(report, ensure_ascii=False, indent=2))
     if not args.build_text_baselines and not args.predictions:
         parser.error("provide a prediction file or --build-text-baselines")

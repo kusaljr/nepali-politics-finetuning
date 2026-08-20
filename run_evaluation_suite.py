@@ -98,6 +98,9 @@ def main() -> None:
         [
             sys.executable, "evaluate.py", str(combined_path),
             "--lid-model", str(lid_path),
+            # CIs for full fine-tune and the seed-7 LoRA run overlap heavily;
+            # this settles which (if either) actually wins on chrF.
+            "--compare", "full-e3-l1024-seed42", "lora-r16-e3-l1024-seed7",
         ],
         check=True,
         text=True,

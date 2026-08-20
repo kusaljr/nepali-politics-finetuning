@@ -25,7 +25,19 @@ The notebook includes:
 - turn-by-turn evaluation with reference conversation history;
 - base, prompted, few-shot, nearest-neighbour, and copy baselines;
 - Unicode-aware ROUGE-L, chrF, repetition, diversity, language-ID, and
-  entity-overlap metrics.
+  entity-overlap metrics, with a conversation-level cluster bootstrap
+  (turns within a conversation are correlated, so resampling turns
+  independently understates CI width) and a paired cluster-bootstrap test
+  for comparing two systems directly (`evaluate.py --compare A B`).
+
+The regex-based person/date entity extractor is a heuristic, not a NER
+model, and it is audited against hand labels in
+`results/entity_extractor_audit.md`: on a 100-turn hand-labeled sample it
+gets 0.19 precision / 0.55 recall against real person mentions in gold
+text, which puts a ceiling on how the `person` row below can be read. The
+date pattern previously required the day number before the month name and
+missed the dominant month-first order in this corpus; both orders are now
+matched.
 
 ## Reproducing the experiments
 
@@ -53,30 +65,77 @@ same reference history. Greedy decoding is used for the reproducible headline
 result; sampled decoding is reported separately when testing repetition.
 
 All systems were evaluated on 1,718 held-out turns. Confidence intervals and
-category-level entity counts are in `results/generation_metrics.json`.
+category-level entity counts are in `results/generation_metrics.json`. The
+file includes the cluster bootstrap, entity-suffix and date-regex fixes,
+gold-answer language-ID reference, entity F1, and paired comparison described
+below.
 
-| System | chrF | Unicode ROUGE-L | Nepali | Entity P/R | rep-4 |
+| System | chrF | Unicode ROUGE-L | Nepali | Entity P/R/F1 | rep-4 |
 |---|---:|---:|---:|---:|---:|
-| Base | 17.09 | 0.131 | 72.4% | 0.324 / 0.093 | 0.065 |
-| Nepali instruction | 15.96 | 0.126 | 73.1% | 0.318 / 0.088 | 0.054 |
-| Three-shot Nepali | 16.69 | 0.126 | 82.1% | 0.260 / 0.086 | 0.068 |
-| Character TF-IDF retrieval | 32.73 | 0.158 | 100.0% | 0.126 / 0.127 | 0.000 |
-| Copy question | 8.50 | 0.118 | 69.9% | 0.524 / 0.061 | 0.000 |
-| LoRA, seed 42 | 38.07 | 0.229 | 99.6% | 0.234 / 0.215 | 0.037 |
-| Full fine-tune | **39.41** | **0.238** | **100.0%** | 0.247 / 0.225 | 0.029 |
-| LoRA, sampled | 37.20 | 0.215 | 99.5% | 0.208 / 0.206 | **0.011** |
+| Base | 17.09 | 0.131 | 72.4% | 0.323 / 0.095 / 0.146 | 0.065 |
+| Nepali instruction | 15.96 | 0.126 | 73.1% | 0.317 / 0.089 / 0.138 | 0.054 |
+| Three-shot Nepali | 16.69 | 0.126 | 82.1% | 0.257 / 0.087 / 0.130 | 0.068 |
+| Character TF-IDF retrieval | 32.73 | 0.158 | 100.0% | 0.126 / 0.126 / 0.126 | 0.000 |
+| Copy question | 8.50 | 0.118 | 69.9% | 0.524 / 0.062 / 0.111 | 0.000 |
+| LoRA, seed 42 | 38.07 | 0.229 | 99.6% | 0.235 / 0.215 / 0.225 | 0.037 |
+| Full fine-tune | 39.41 | 0.238 | 100.0% | 0.248 / 0.226 / 0.236 | 0.029 |
+| LoRA, sampled | 37.20 | 0.215 | 99.5% | 0.208 / 0.206 / 0.207 | **0.011** |
 
-Fine-tuning produces a large language-control gain and improves overlap with
-the references. It does not establish factual knowledge: entity precision is
-only 0.247 for the best system, and the dataset itself is synthetic. Full
-fine-tuning narrowly beats the three LoRA seeds (chrF 38.07, 39.44, and 38.26).
-Sampling reduces repetition but also lowers chrF.
+Full fine-tune is not bolded as the winner: its chrF CI is [38.80, 40.03] and
+LoRA seed 7's is [38.85, 40.02]. The paired full-minus-LoRA difference is
+-0.028 chrF with a 95% CI of [-0.337, 0.272], which includes zero. The runs
+are not distinguishable on this test set.
+
+**Copy-question's entity precision (0.524, the highest in the table) is a
+volume artifact, not a factual-accuracy result.** It echoes the question
+back, so almost everything it emits is a real entity — it just emits very
+few compared to gold (785 person predictions versus 6,222 gold mentions;
+the base model predicts 1,795, for scale). The base model's 0.323 similarly beats the
+fine-tuned model's 0.248 partly because the base model says less. F1 is the
+column to read for a precision/recall tradeoff comparison; it still does not
+fully remove the volume effect, which is why the number above is reported
+alongside it rather than in place of it.
+
+**The character TF-IDF retrieval baseline (32.73 chrF, zero training) is the
+most important line in this table and was previously under-discussed.**
+Against it, fine-tuning's gain is 39.41 − 32.73 = 6.7 chrF, not the 22-point
+gain visible against the base model (39.41 − 17.09). Both deltas are worth
+reporting: fine-tuning clearly beats a zero-cost lookup table, but by much
+less than it beats doing nothing. A nearest-neighbour lookup over training
+questions scoring 32.7 chrF on held-out test questions also means the random
+90/10 split has enough near-duplicate question content that a lookup table
+gets most of the way there — evidence the split is not source-disjoint,
+not evidence about the model. Fine-tuning's clearest advantage over the
+retrieval baseline is entity recall (0.215 vs. 0.127), which is a lower-cost
+claim than "produces a large language-control gain" and is the one this
+report leans on.
+
+Assistant-only masking made little difference to loss (see below); sampling
+reduces repetition but also lowers chrF.
 
 The standard `rouge_score` tokenizer is unsuitable for these Devanagari
 outputs: every system scores about 0.000--0.001 with it, compared with
 0.118--0.238 using the Unicode-aware tokenizer. A bounded review of six ACL
 Anthology papers is recorded in `results/rouge_literature_review.md`; five did
 not document a custom or language-aware ROUGE tokenizer.
+
+`copy-question` echoes the Nepali question verbatim and should score close to
+100% on the Nepali-language-ID check; it scores 69.9%, well below every
+fine-tuned system. That gap says fastText `lid.176` is not reliable on short
+Devanagari text (it is known to confuse `ne`/`hi`), so the 99.6–100.0% rows
+for the fine-tuned systems should be read as "this checker did not flag a
+problem," not as a validated 100% Nepali rate. `evaluate.py` now also scores
+the gold answers themselves when a LID model is supplied
+(`_gold_language_reference` in the report) so the ceiling is visible next to
+every system's number. Gold answers score 99.88% Nepali and 0.12% Hindi.
+
+### Corrected re-evaluation
+
+The published metrics were regenerated from the saved full-test predictions
+after adding the cluster bootstrap, paired comparison, person-suffix and date
+fixes, gold-language-ID reference, and entity F1. The raw predictions and
+weights remain outside Git (see `.gitignore`: `runs/`,
+`evaluation/*.jsonl`).
 
 ## Training configuration
 

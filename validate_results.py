@@ -54,15 +54,27 @@ def main() -> None:
         assert run["common_eval"]["eval_examples"] == 346
         assert math.isfinite(run["common_eval"]["metrics"]["eval_loss"])
 
-    assert set(metrics) == EVALUATED_SYSTEMS
-    for result in metrics.values():
+    system_names = {name for name in metrics if not name.startswith("_")}
+    assert system_names == EVALUATED_SYSTEMS
+    for name in system_names:
+        result = metrics[name]
         assert result["n"] == 1718
-        for name in ("rougeL_default", "rougeL_unicode", "chrf", "distinct_2", "rep_4"):
-            assert math.isfinite(result[name]["mean"])
-            assert len(result[name]["ci95"]) == 2
+        for metric_name in ("rougeL_default", "rougeL_unicode", "chrf", "distinct_2", "rep_4"):
+            assert math.isfinite(result[metric_name]["mean"])
+            assert len(result[metric_name]["ci95"]) == 2
         assert "language_ne_accuracy" in result
         assert "language_hi_rate" in result
         assert set(result["entities"]) == {"person", "party", "date", "number"}
+        assert math.isfinite(result["entity_f1"])
+        for entity_result in result["entities"].values():
+            assert math.isfinite(entity_result["f1"])
+
+    assert "_gold_language_reference" in metrics, (
+        "gold-answer LID ceiling is missing; rerun evaluate.py with --lid-model"
+    )
+    comparison = metrics["_comparisons"]["full-e3-l1024-seed42_vs_lora-r16-e3-l1024-seed7"]
+    assert comparison["n"] > 0
+    assert len(comparison["ci95"]) == 2
 
     assert lengths["conversations"] == 3460
     assert lengths["over_512_count"] == 3221

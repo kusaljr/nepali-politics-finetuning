@@ -1,0 +1,21 @@
+{
+  "methodology": "hand-labeled against the first 100 of 1718 seed-42 held-out gold test turns; see results/entity_extractor_audit.md",
+  "person": {
+    "candidates_emitted": 385,
+    "candidates_correct": 73,
+    "extractor_precision": 0.1896,
+    "real_person_mentions": 125,
+    "real_mentions_caught": 69,
+    "extractor_recall": 0.552
+  },
+  "date": {
+    "methodology": "mechanical regex re-run over all 1718 gold test turns, not hand-labeled",
+    "gold_dates_found_before_fix": 99,
+    "gold_dates_found_after_fix": 244
+  },
+  "corpus_wide_effect_of_person_suffix_fix": {
+    "note": "total person candidates over all 1718 gold test turns (set-deduplicated per turn), before vs after stripping the case suffix consistently across both regexes",
+    "before_fix": 6480,
+    "after_fix": 6222
+  }
+}
