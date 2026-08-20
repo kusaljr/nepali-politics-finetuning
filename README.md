@@ -86,6 +86,31 @@ LoRA seed 7's is [38.85, 40.02]. The paired full-minus-LoRA difference is
 -0.028 chrF with a 95% CI of [-0.337, 0.272], which includes zero. The runs
 are not distinguishable on this test set.
 
+### Generation behavior
+
+The full fine-tune's greedy outputs are generally fluent, news-shaped Nepali
+paragraphs rather than short answer fragments. Their median length is 96
+generated tokens (p90 120); none is empty, and only 5 of 1,718 outputs reach
+the 256-token cap. This matches the language-ID result, but fluency should not
+be confused with factual accuracy.
+
+Entity substitution is the clearest qualitative failure. For the question
+`नेकपा माओवादीका उम्मेदवार कसले दर्ता गराए?`, the reference names शेरबहादुर
+विक in अछाम–२. The full model preserves the constituency, registration event,
+weekday, time, and office but names नारायणप्रसाद भट्टराई instead. Even a
+high-overlap answer can therefore get the central fact wrong. Other outputs
+invent candidate lists or replace the event while retaining a confident news
+register.
+
+Greedy decoding has a repetition tail: 148 outputs have rep-4 above 0.1 and 5
+exceed 0.5. The worst examples loop phrases such as `प्रहरी प्रहरी` or repeat
+the same clause many times. Sampling lowers average rep-4 from 0.029 to 0.011
+and reduces the number above 0.1 from 148 to 36, but it is not uniformly safer:
+241 sampled outputs contain an ASCII word, including a few severe English-token
+loops. Greedy decoding is therefore the better default for stable Nepali text;
+sampling is useful only with additional degeneration checks. The derived
+counts are stored in `results/generation_behavior.json`.
+
 **Copy-question's entity precision (0.524, the highest in the table) is a
 volume artifact, not a factual-accuracy result.** It echoes the question
 back, so almost everything it emits is a real entity — it just emits very

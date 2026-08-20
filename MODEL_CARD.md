@@ -64,6 +64,15 @@ metrics and bootstrap intervals are in `results/generation_metrics.json`,
 including the corrected cluster bootstrap, entity extraction, gold-answer
 language-ID reference, and paired full-vs-LoRA comparison.
 
+The full fine-tune usually generates fluent news-style Nepali: median output
+length is 96 tokens, no test output is empty, and 5/1,718 outputs hit the
+256-token cap. It can nevertheless replace the answer's central person, party,
+date, or number while preserving plausible surrounding detail. Greedy decoding
+also has a small severe-repetition tail. Sampling reduces average repetition
+but produces mixed English-token or garbled loops more often, so it is not the
+recommended default. Aggregate behavior counts are in
+`results/generation_behavior.json`.
+
 ## Limitations
 
 - The data are synthetic and may contain factual errors or stylistic artifacts.

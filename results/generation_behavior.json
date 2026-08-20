@@ -1,0 +1,25 @@
+{
+  "test_turns": 1718,
+  "full_fine_tune_greedy": {
+    "median_generated_tokens": 96,
+    "p90_generated_tokens": 120,
+    "hit_256_token_cap": 5,
+    "rep4_over_0_1": 148,
+    "rep4_over_0_5": 5,
+    "outputs_with_ascii_word": 7,
+    "empty_outputs": 0
+  },
+  "lora_seed42_sampled": {
+    "median_generated_tokens": 93,
+    "p90_generated_tokens": 115,
+    "hit_256_token_cap": 7,
+    "rep4_over_0_1": 36,
+    "rep4_over_0_5": 7,
+    "outputs_with_ascii_word": 241,
+    "empty_outputs": 0
+  },
+  "notes": {
+    "rep4_thresholds": "Per-output repeated four-gram rate using Unicode letter, mark, and number tokens, matching evaluate.py.",
+    "ascii_word": "At least one match of three or more consecutive ASCII letters; this flags mixed-script output but is not a language score."
+  }
+}
